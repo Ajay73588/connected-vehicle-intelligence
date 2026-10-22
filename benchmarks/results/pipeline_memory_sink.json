@@ -1,0 +1,60 @@
+{
+  "machine": {
+    "cpu": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+    "logical_cores": 16,
+    "python": "3.13.7",
+    "ram_gb": 15.8,
+    "os": "Windows-11-10.0.26200-SP0"
+  },
+  "params": {
+    "vehicles": 20000,
+    "events": 120000,
+    "batch": 500,
+    "redis": "redis://localhost:6379/3",
+    "sink": "memory",
+    "no_chaos": false,
+    "profile": false,
+    "out": "benchmarks/results/pipeline_memory_sink.json"
+  },
+  "generate": {
+    "messages": 120076,
+    "seconds": 1.17,
+    "msgs_per_s": 103042,
+    "chaos": {
+      "duplicates": 1231,
+      "out_of_order": 2397,
+      "late": 341,
+      "malformed": 339,
+      "burst_flushed": 0
+    }
+  },
+  "validate": {
+    "valid": 119737,
+    "rejected_to_dlq": 339,
+    "seconds": 2.78,
+    "msgs_per_s": 43167
+  },
+  "process": {
+    "messages": 119737,
+    "seconds": 18.14,
+    "events_per_s": 6600,
+    "batch_size": 500,
+    "batch_latency_ms": {
+      "p50": 59.1,
+      "p95": 76.1,
+      "p99": 521.7
+    },
+    "per_event_us": 151.5,
+    "cpu_seconds": 15.16,
+    "rss_mb": 2995,
+    "sink": "memory",
+    "duplicates": 1231,
+    "late": 278,
+    "out_of_order": 0,
+    "dlq": 0,
+    "alerts": 49,
+    "processed": 118506,
+    "aggregate_events_in_redis": 118228,
+    "distinct_events_expected": 118228
+  }
+}

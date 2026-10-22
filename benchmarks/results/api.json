@@ -1,0 +1,97 @@
+{
+  "clients": 16,
+  "seconds": 70.0,
+  "endpoints": {
+    "GET /vehicles?limit=50": {
+      "requests": 2019,
+      "ok_requests": 2019,
+      "rps": 200.8,
+      "p50_ms": 71.4,
+      "p95_ms": 89.4,
+      "p99_ms": 104.9,
+      "mean_ms": 71.8,
+      "status_codes": {
+        "200": 2019
+      },
+      "server_errors": 0
+    },
+    "GET /vehicles (keyset page 2)": {
+      "requests": 1907,
+      "ok_requests": 1907,
+      "rps": 189.8,
+      "p50_ms": 74.7,
+      "p95_ms": 90.9,
+      "p99_ms": 98.4,
+      "mean_ms": 74.4,
+      "status_codes": {
+        "200": 1907
+      },
+      "server_errors": 0
+    },
+    "GET /vehicles/{id}": {
+      "requests": 3227,
+      "ok_requests": 3227,
+      "rps": 322.0,
+      "p50_ms": 43.0,
+      "p95_ms": 54.7,
+      "p99_ms": 63.8,
+      "mean_ms": 43.8,
+      "status_codes": {
+        "200": 3227
+      },
+      "server_errors": 0
+    },
+    "GET /alerts?status=open": {
+      "requests": 2223,
+      "ok_requests": 2223,
+      "rps": 221.5,
+      "p50_ms": 63.0,
+      "p95_ms": 80.0,
+      "p99_ms": 94.8,
+      "mean_ms": 63.7,
+      "status_codes": {
+        "200": 2223
+      },
+      "server_errors": 0
+    },
+    "GET /analytics/summary": {
+      "requests": 5700,
+      "ok_requests": 5700,
+      "rps": 569.2,
+      "p50_ms": 23.4,
+      "p95_ms": 29.3,
+      "p99_ms": 119.1,
+      "mean_ms": 24.8,
+      "status_codes": {
+        "200": 5700
+      },
+      "server_errors": 0
+    },
+    "GET /analytics/maintenance": {
+      "requests": 3143,
+      "ok_requests": 3143,
+      "rps": 313.8,
+      "p50_ms": 44.0,
+      "p95_ms": 53.3,
+      "p99_ms": 78.0,
+      "mean_ms": 44.7,
+      "status_codes": {
+        "200": 3143
+      },
+      "server_errors": 0
+    },
+    "GET /map/vehicles": {
+      "requests": 2286,
+      "ok_requests": 2286,
+      "rps": 228.1,
+      "p50_ms": 62.5,
+      "p95_ms": 71.7,
+      "p99_ms": 77.2,
+      "mean_ms": 62.0,
+      "status_codes": {
+        "200": 2286
+      },
+      "server_errors": 0
+    }
+  }
+}

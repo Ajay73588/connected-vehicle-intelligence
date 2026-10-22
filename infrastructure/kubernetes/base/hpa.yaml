@@ -1,0 +1,40 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: api }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } } }]
+  behavior: { scaleDown: { stabilizationWindowSeconds: 300 } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: ingestion-edge }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: ingestion-edge }
+  minReplicas: 3
+  maxReplicas: 30
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 55 } } }]
+  behavior: { scaleDown: { stabilizationWindowSeconds: 300 } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: validator }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: validator }
+  minReplicas: 3
+  maxReplicas: 24
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } } }]
+  behavior: { scaleDown: { stabilizationWindowSeconds: 300 } }
+---
+# maxReplicas = TOPIC_PARTITIONS (48): extra replicas would sit idle. overlays/aws scales on Kafka lag via KEDA.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: stream-processor }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: stream-processor }
+  minReplicas: 6
+  maxReplicas: 48
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 65 } } }]
+  behavior: { scaleDown: { stabilizationWindowSeconds: 300 } }

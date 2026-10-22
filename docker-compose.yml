@@ -1,0 +1,187 @@
+# Connected Vehicle Intelligence — full local stack.   cp .env.example .env && docker compose up --build
+# Open http://localhost:${FRONTEND_PORT:-8080}  (demo accounts are listed on the login page).
+name: cvi
+
+x-python: &python
+  build: { context: ., dockerfile: infrastructure/docker/Dockerfile.python }
+  image: cvi-python:local
+  restart: unless-stopped
+  env_file: [.env]
+  environment: &env
+    ENV: development
+    DATABASE_URL: postgresql://cvi_app:${APP_DB_PASSWORD}@postgres:5432/cvi
+    WORKER_DATABASE_URL: postgresql://cvi_worker:${WORKER_DB_PASSWORD}@postgres:5432/cvi
+    ADMIN_DATABASE_URL: postgresql://cvi:${POSTGRES_PASSWORD}@postgres:5432/cvi
+    APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD}
+    REDIS_URL: redis://redis:6379/0
+    MONGO_URL: mongodb://mongo:27017
+    BROKER: kafka
+    KAFKA_BOOTSTRAP: kafka:9092
+    MQTT_HOST: mosquitto
+    OBJECT_STORE: s3
+    S3_ENDPOINT: http://minio:9000
+    S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+    S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    S3_BUCKET: cvi-telemetry
+    OTLP_ENDPOINT: http://jaeger:4318
+    CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-8080}
+    BATCH_SIZE: ${WORKER_BATCH_SIZE:-500}
+  depends_on: &deps
+    init: { condition: service_completed_successfully }
+    kafka: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    mongo: { condition: service_healthy }
+    minio: { condition: service_healthy }
+
+services:
+  # ------------------------------------------------------------------ data stores
+  postgres:
+    image: pgvector/pgvector:pg16            # PostgreSQL 16 + pgvector (relational + vector)
+    restart: unless-stopped
+    environment: { POSTGRES_USER: cvi, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}", POSTGRES_DB: cvi }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "max_connections=200", "-c", "wal_level=replica"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U cvi -d cvi"], interval: 5s, timeout: 3s, retries: 20 }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
+    volumes: [redisdata:/data]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20 }
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes: [mongodata:/data/db]
+    healthcheck: { test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"], interval: 10s, timeout: 5s, retries: 20 }
+
+  minio:                                       # S3-compatible object storage (stand-in for S3 / GCS / Azure Blob)
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment: { MINIO_ROOT_USER: "${MINIO_ROOT_USER}", MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}" }
+    volumes: [miniodata:/data]
+    ports: ["${MINIO_CONSOLE_PORT:-9001}:9001"]
+    healthcheck: { test: ["CMD", "mc", "ready", "local"], interval: 5s, timeout: 3s, retries: 20 }
+
+  kafka:                                       # Apache Kafka (KRaft, single broker for dev; 3+ brokers in production)
+    image: apache/kafka:3.8.0
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 24
+    volumes: [kafkadata:/var/lib/kafka/data]
+    healthcheck: { test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"], interval: 10s, timeout: 10s, retries: 20, start_period: 20s }
+
+  mosquitto:                                   # MQTT front door for devices
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes: [./infrastructure/docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro]
+    ports: ["1883:1883"]
+
+  # ------------------------------------------------------------------ one-shot initialisation (migrations + seed + model scoring)
+  init:
+    <<: *python
+    restart: "no"
+    command: ["python", "scripts/seed.py", "--vehicles", "${SEED_VEHICLES:-100000}", "--history-alerts", "${SEED_HISTORY_ALERTS:-200000}", "--history-days", "${SEED_HISTORY_DAYS:-14}"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck: { disable: true }
+
+  # ------------------------------------------------------------------ application services
+  api:
+    <<: *python
+    command: ["python", "-m", "cvi.api"]
+    ports: ["${API_PORT:-8000}:8000"]
+    environment: { <<: *env, HEALTH_PORT: "8000" }
+    depends_on: *deps
+    healthcheck: { test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=2)"], interval: 10s, timeout: 3s, retries: 10, start_period: 20s }
+
+  ingestion-edge:                              # HTTPS batch + MQTT bridge -> telemetry.raw
+    <<: *python
+    command: ["python", "-m", "cvi.ingestion.gateway"]
+    ports: ["${INGEST_PORT:-8001}:8001"]
+    environment: { <<: *env, HEALTH_PORT: "8001" }
+    depends_on: *deps
+
+  validator:                                   # telemetry.raw -> schema/VIN/OBD validation -> telemetry.validated | DLQ
+    <<: *python
+    command: ["python", "-m", "cvi.ingestion.validator"]
+    environment: { <<: *env, HEALTH_PORT: "9102" }
+    depends_on: *deps
+
+  stream-processor:                            # scale with: docker compose up -d --scale stream-processor=3
+    <<: *python
+    command: ["python", "-m", "cvi.stream.worker"]
+    environment: { <<: *env, HEALTH_PORT: "9101" }
+    depends_on: *deps
+
+  lifecycle:                                   # KPI refresh, Parquet compaction, retention, batch ML scoring
+    <<: *python
+    command: ["python", "-m", "cvi.lifecycle"]
+    environment: { <<: *env, HEALTH_PORT: "9103" }
+    depends_on: *deps
+
+  simulator:                                   # synthetic fleet (profile "sim"; started by COMPOSE_PROFILES=sim in .env)
+    <<: *python
+    profiles: ["sim"]
+    command: ["python", "services/simulator/simulator.py", "--mode", "${SIM_MODE:-demo}", "--vehicles", "${SIM_VEHICLES:-1000}", "--events-per-second", "${SIM_EVENTS_PER_SECOND:-150}", "--sink", "kafka"]
+    healthcheck: { disable: true }
+    volumes: [./services:/app/services:ro]
+    depends_on: *deps
+
+  frontend:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.frontend }
+    image: cvi-frontend:local
+    restart: unless-stopped
+    ports: ["${FRONTEND_PORT:-8080}:8080"]
+    depends_on: { api: { condition: service_healthy } }
+
+  # ------------------------------------------------------------------ observability
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["${PROMETHEUS_PORT:-9090}:9090"]
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment: { GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}", GF_USERS_ALLOW_SIGN_UP: "false" }
+    volumes:
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["${GRAFANA_PORT:-3000}:3000"]
+    depends_on: [prometheus, loki]
+  jaeger:                                      # traces (OpenTelemetry OTLP/HTTP on 4318)
+    image: jaegertracing/all-in-one:1.60
+    restart: unless-stopped
+    environment: { COLLECTOR_OTLP_ENABLED: "true" }
+    ports: ["${JAEGER_PORT:-16686}:16686"]
+  loki:                                        # centralised logs
+    image: grafana/loki:3.1.1
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+  promtail:
+    image: grafana/promtail:3.1.1
+    restart: unless-stopped
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./infrastructure/observability/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
+
+volumes: { pgdata: {}, redisdata: {}, mongodata: {}, miniodata: {}, kafkadata: {} }

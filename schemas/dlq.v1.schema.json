@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeadLetter v1 (topic: telemetry.dlq)",
+  "type": "object",
+  "required": ["reason", "value"],
+  "properties": {
+    "reason": {"enum": ["malformed", "schema_violation", "invalid_vin", "timestamp_in_future", "obd_parse_error", "unknown_vehicle", "tenant_mismatch", "processing_error"]},
+    "detail": {"type": "string"},
+    "topic": {"type": "string"},
+    "partition": {"type": "integer"},
+    "offset": {"type": "integer"},
+    "value": {"type": "string"}
+  },
+  "additionalProperties": false
+}

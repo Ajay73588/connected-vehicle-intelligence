@@ -1,0 +1,39 @@
+{
+  "version": "pm-20261001-1c7c7f",
+  "data": {
+    "kind": "SYNTHETIC (hidden-wear generator, see cvi/ml/synthetic.py)",
+    "n": 60000,
+    "positive_rate": 0.10088333333333334,
+    "split": {
+      "train": 36000,
+      "val": 12000,
+      "test": 12000
+    }
+  },
+  "horizon_days": 14,
+  "baseline_rule_test": {
+    "roc_auc": 0.5962712121002223,
+    "pr_auc": 0.15414274763697047,
+    "top10pct": {
+      "precision": 0.18416666666666667,
+      "recall": 0.18249380677126342
+    }
+  },
+  "model_validation": {
+    "roc_auc": 0.8538678298700205,
+    "pr_auc": 0.5161847918139277,
+    "top10pct": {
+      "precision": 0.51,
+      "recall": 0.5057851239669422
+    }
+  },
+  "model_test": {
+    "roc_auc": 0.8529753865128099,
+    "pr_auc": 0.503207894011008,
+    "top10pct": {
+      "precision": 0.5008333333333334,
+      "recall": 0.4962840627580512
+    }
+  },
+  "model_test_brier": 0.06647936848765305
+}

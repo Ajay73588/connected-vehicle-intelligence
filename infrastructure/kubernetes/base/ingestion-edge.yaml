@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-edge
+  labels: { app.kubernetes.io/name: ingestion-edge, app.kubernetes.io/part-of: cvi }
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app.kubernetes.io/name: ingestion-edge } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: ingestion-edge, app.kubernetes.io/part-of: cvi }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "8001", prometheus.io/path: /metrics }
+    spec:
+      serviceAccountName: cvi
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: ingestion-edge } } }
+      containers:
+        - name: ingestion-edge
+          image: cvi-python:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "cvi.ingestion.gateway"]
+          ports:
+            - { name: http, containerPort: 8001 }
+          env:
+            - { name: HEALTH_PORT, value: "8001" }
+          envFrom:
+            - configMapRef: { name: cvi-config }
+            - secretRef: { name: cvi-secrets }
+          resources:
+            requests: { cpu: 500m, memory: 256Mi }
+            limits: { cpu: "2", memory: 512Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }, { name: data, mountPath: /data }]
+          startupProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 5, failureThreshold: 30 }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3 }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3 }
+      volumes: [{ name: tmp, emptyDir: {} }, { name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-edge
+  labels: { app.kubernetes.io/name: ingestion-edge }
+spec:
+  selector: { app.kubernetes.io/name: ingestion-edge }
+  ports: [{ name: http, port: 8001, targetPort: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: ingestion-edge }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/name: ingestion-edge } }

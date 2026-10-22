@@ -1,0 +1,15 @@
+# Local cluster (kind / minikube / k3d): single replicas, in-cluster dependencies from dev-deps.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../base, dev-deps.yaml]
+images:
+  - { name: cvi-python, newName: cvi-python, newTag: local }
+  - { name: cvi-frontend, newName: cvi-frontend, newTag: local }
+patches:
+  - target: { kind: HorizontalPodAutoscaler }
+    patch: |-
+      - { op: replace, path: /spec/minReplicas, value: 1 }
+      - { op: replace, path: /spec/maxReplicas, value: 3 }
+  - target: { kind: Deployment, labelSelector: "app.kubernetes.io/part-of=cvi" }
+    patch: |-
+      - { op: replace, path: /spec/replicas, value: 1 }

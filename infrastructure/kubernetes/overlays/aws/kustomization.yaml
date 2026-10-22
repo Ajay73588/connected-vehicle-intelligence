@@ -1,0 +1,23 @@
+# AWS (EKS): endpoints of RDS / ElastiCache / MSK / DocumentDB come from Terraform outputs; secrets from AWS Secrets Manager.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cvi
+resources: [../../base, external-secret.yaml, keda-scaledobject.yaml]
+images:
+  - { name: cvi-python, newName: 000000000000.dkr.ecr.us-east-1.amazonaws.com/cvi-python, newTag: "1.0.0" }
+  - { name: cvi-frontend, newName: 000000000000.dkr.ecr.us-east-1.amazonaws.com/cvi-frontend, newTag: "1.0.0" }
+patches:
+  - target: { kind: ConfigMap, name: cvi-config }
+    patch: |-
+      - { op: replace, path: /data/KAFKA_BOOTSTRAP, value: "b-1.cvi.xxxxxx.kafka.us-east-1.amazonaws.com:9092,b-2.cvi.xxxxxx.kafka.us-east-1.amazonaws.com:9092" }
+      - { op: replace, path: /data/REDIS_URL, value: "rediss://cvi-redis.xxxxxx.use1.cache.amazonaws.com:6379/0" }
+      - { op: replace, path: /data/MONGO_URL, value: "mongodb://cvi-docdb.cluster-xxxxxx.us-east-1.docdb.amazonaws.com:27017/?tls=true&retryWrites=false" }
+  - target: { kind: ServiceAccount, name: cvi }
+    patch: |-
+      - { op: replace, path: /metadata/annotations, value: { "eks.amazonaws.com/role-arn": "arn:aws:iam::000000000000:role/cvi-app" } }
+  # KEDA owns autoscaling of the stream processors in AWS, so drop the CPU-based HPA to avoid two controllers fighting
+  - patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata: { name: stream-processor }

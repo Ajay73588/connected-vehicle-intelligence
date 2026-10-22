@@ -1,0 +1,18 @@
+{
+  "vehicles": 100000,
+  "logical_cores": 16,
+  "runs": [
+    {
+      "workers": 1,
+      "messages_per_s": 79528
+    },
+    {
+      "workers": 2,
+      "messages_per_s": 157702
+    },
+    {
+      "workers": 4,
+      "messages_per_s": 213306
+    }
+  ]
+}

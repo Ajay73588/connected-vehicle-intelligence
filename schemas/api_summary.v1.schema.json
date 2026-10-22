@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Executive summary v1 (GET /api/v1/analytics/summary)",
+  "type": "object",
+  "required": ["total_vehicles", "active_vehicles", "open_alerts", "fleet_health", "safety", "maintenance_risk", "utilization", "energy", "idling", "realtime"],
+  "properties": {
+    "total_vehicles": {"type": "integer", "minimum": 0},
+    "active_vehicles": {"type": "integer", "minimum": 0},
+    "open_alerts": {"type": "object", "required": ["critical", "warning", "info", "total"]},
+    "fleet_health": {"type": "object", "required": ["avg_score", "vehicles_below_60"]},
+    "safety": {"type": "object", "required": ["score", "high_risk_vehicles"]},
+    "maintenance_risk": {"type": "object", "required": ["vehicles_over_50pct"]},
+    "utilization": {"type": "object", "required": ["vehicles_moving_today", "pct", "distance_km", "drive_hours"]},
+    "energy": {"type": "object", "required": ["fuel_litres", "energy_kwh"]},
+    "idling": {"type": "object", "required": ["hours", "est_fuel_litres", "est_cost_usd"]},
+    "realtime": {"type": "object", "required": ["events_this_hour", "harsh_events_this_hour", "speeding_this_hour"]}
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "REST alert item v1 (GET /api/v1/alerts)",
+  "type": "object",
+  "required": ["id", "vehicle_id", "vin", "type", "title", "severity", "status", "confidence", "cause", "recommended_action", "event_ts", "created_at"],
+  "properties": {
+    "id": {"type": "integer"}, "vehicle_id": {"type": "integer"}, "vin": {"type": "string"}, "type": {"type": "string"}, "title": {"type": "string"},
+    "severity": {"enum": ["info", "warning", "critical"]}, "status": {"enum": ["open", "acknowledged", "resolved"]},
+    "confidence": {"type": ["string", "number"]}, "cause": {"type": "string"}, "recommended_action": {"type": "string"},
+    "details": {"type": "object"}, "event_ts": {"type": "string"}, "created_at": {"type": "string"}
+  }
+}

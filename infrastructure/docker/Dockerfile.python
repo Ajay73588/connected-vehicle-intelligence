@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1.7
+# One image for every Python service (api, ingestion-edge, validator, stream-processor, lifecycle, simulator, seed).
+# The service is selected by the container command, e.g. `python -m cvi.api`.
+FROM python:3.12-slim AS builder
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /build
+RUN python -m venv /venv
+ENV PATH="/venv/bin:$PATH"
+COPY pyproject.toml ./
+COPY src ./src
+RUN pip install .
+# Train the predictive-maintenance model at build time (≈5 s, deterministic, synthetic data) so images are self-contained.
+RUN mkdir -p ml
+RUN python -m cvi.ml.train
+
+FROM python:3.12-slim AS runtime
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PATH="/venv/bin:$PATH" MODEL_DIR=/app/ml/artifacts
+RUN useradd --system --uid 10001 --create-home cvi && mkdir -p /app /data && chown cvi /data
+WORKDIR /app
+COPY --from=builder /venv /venv
+COPY --from=builder /build/ml/artifacts /app/ml/artifacts
+COPY migrations ./migrations
+COPY scripts ./scripts
+COPY schemas ./schemas
+USER 10001
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=5 \
+  CMD python -c "import os,urllib.request;urllib.request.urlopen('http://127.0.0.1:%s/health/live' % os.environ.get('HEALTH_PORT','8000'), timeout=2)" || exit 1
+CMD ["python", "-m", "cvi.api"]

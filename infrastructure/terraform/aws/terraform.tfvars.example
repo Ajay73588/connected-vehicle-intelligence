@@ -1,0 +1,14 @@
+region      = "us-east-1"
+environment = "prod"
+alert_email = "oncall@example.com"
+
+# Cost-saving profile for a demo account (single NAT, smaller instances, no deletion protection):
+# environment             = "dev"
+# node_instance_types     = ["t3.large"]
+# node_min                = 2
+# db_instance_class       = "db.t4g.medium"
+# redis_node_type         = "cache.t4g.small"
+# msk_broker_instance_type = "kafka.t3.small"
+# msk_broker_volume_gb    = 50
+# docdb_instance_class    = "db.t4g.medium"
+# deletion_protection     = false

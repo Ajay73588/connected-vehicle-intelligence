@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Plain, quiet palette: neutral greys, one restrained accent, status colours used only for status. */
+@theme {
+  --color-ink: #f3f4f6;
+  --color-panel: #ffffff;
+  --color-panel2: #f3f4f6;
+  --color-line: #d8dce2;
+  --color-muted: #6b7280;
+  --color-brand: #2f5d8a;
+  --color-ok: #1b7f4b;
+  --color-warn: #a65f00;
+  --color-crit: #b42318;
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-ink text-gray-900 antialiased;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+}
+h1 { @apply text-lg font-semibold text-gray-900; }
+.card { @apply rounded border border-line bg-panel p-3; }
+.btn { @apply inline-flex items-center justify-center rounded border border-brand bg-brand px-3 py-1.5 text-sm text-white hover:bg-[#264d73] disabled:opacity-50; }
+.btn-ghost { @apply inline-flex items-center justify-center rounded border border-line bg-white px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50 disabled:opacity-50; }
+.input { @apply w-full rounded border border-line bg-white px-2.5 py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-brand; }
+.th { @apply bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-600; }
+.td { @apply px-3 py-2 text-sm; }
+table { @apply border-collapse; }
+.leaflet-container { background: #e5e7eb; border-radius: 4px; }

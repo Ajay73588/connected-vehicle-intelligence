@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cvi
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 8m
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  ingressClassName: nginx
+  tls: [{ hosts: [cvi.example.com], secretName: cvi-tls }]
+  rules:
+    - host: cvi.example.com
+      http:
+        paths:
+          - { path: /v1/telemetry, pathType: Prefix, backend: { service: { name: ingestion-edge, port: { number: 8001 } } } }
+          - { path: /api, pathType: Prefix, backend: { service: { name: api, port: { number: 8000 } } } }
+          - { path: /auth, pathType: Prefix, backend: { service: { name: api, port: { number: 8000 } } } }
+          - { path: /, pathType: Prefix, backend: { service: { name: frontend, port: { number: 80 } } } }

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - config.yaml
+  - api.yaml
+  - ingestion-edge.yaml
+  - validator.yaml
+  - stream-processor.yaml
+  - lifecycle.yaml
+  - frontend.yaml
+  - migrate-job.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - networkpolicy.yaml

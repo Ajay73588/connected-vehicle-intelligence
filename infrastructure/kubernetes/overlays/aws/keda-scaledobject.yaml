@@ -1,0 +1,15 @@
+# Scale stream processors on Kafka consumer lag (needs KEDA). Replaces CPU-based scaling in production.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: { name: stream-processor }
+spec:
+  scaleTargetRef: { name: stream-processor }
+  minReplicaCount: 6
+  maxReplicaCount: 48
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: b-1.cvi.xxxxxx.kafka.us-east-1.amazonaws.com:9092
+        consumerGroup: stream-processor
+        topic: telemetry.validated
+        lagThreshold: "5000"

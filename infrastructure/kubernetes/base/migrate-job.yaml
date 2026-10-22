@@ -1,0 +1,21 @@
+# Schema migrations + reference/seed data. Runs once per release (ArgoCD PreSync, or `kubectl apply`).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cvi-init
+  annotations: { argocd.argoproj.io/hook: PreSync }
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: cvi
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: init
+          image: cvi-python:latest
+          command: ["python", "scripts/seed.py", "--vehicles", "100000", "--history-alerts", "200000"]
+          envFrom: [{ configMapRef: { name: cvi-config } }, { secretRef: { name: cvi-secrets } }]
+          resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { cpu: "2", memory: 3Gi } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

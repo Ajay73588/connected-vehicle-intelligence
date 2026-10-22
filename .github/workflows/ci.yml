@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+concurrency: { group: "ci-${{ github.ref }}", cancel-in-progress: true }
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  lint:
+    name: Lint & types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests scripts benchmarks
+      - run: mypy src/cvi
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: cd frontend && npm ci && npx tsc -b
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/unit -p no:cacheprovider
+
+  integration:
+    name: Integration, contract & acceptance tests (real PostgreSQL+pgvector, Redis, MongoDB, Kafka)
+    runs-on: ubuntu-latest
+    needs: [lint, unit]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 20
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+      kafka:
+        image: apache/kafka:3.8.0
+        ports: ["9092:9092"]
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    env:
+      TEST_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      SKIP_VECTOR_INDEX: "false"          # real pgvector with HNSW indexes
+      VECTOR_BACKEND: pgvector
+      TEST_KAFKA_BOOTSTRAP: localhost:9092
+      TEST_MONGO_URL: mongodb://localhost:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install -e ".[dev]"
+      - name: Tests with coverage gate (>= 80%)
+        run: pytest tests --cov=cvi --cov-report=xml --cov-report=term-missing:skip-covered --cov-fail-under=80
+      - uses: actions/upload-artifact@v4
+        with: { name: coverage, path: coverage.xml }
+
+  frontend:
+    name: Frontend tests & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: cd frontend && npm ci && npm test && npm run build
+
+  security:
+    name: SAST & dependency scan
+    runs-on: ubuntu-latest
+    permissions: { contents: read, security-events: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install -e ".[dev]" bandit pip-audit semgrep
+      - run: bandit -q -r src -ll
+      - run: semgrep --config p/python --config p/owasp-top-ten --error src
+      - run: pip-audit --skip-editable
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - run: cd frontend && npm ci && npm audit --audit-level=high
+      - name: Trivy (filesystem, IaC and secrets)
+        uses: aquasecurity/trivy-action@0.24.0
+        with: { scan-type: fs, scanners: "vuln,secret,misconfig", severity: "HIGH,CRITICAL", exit-code: "1", ignore-unfixed: true }
+
+  images:
+    name: Docker build & container scan
+    runs-on: ubuntu-latest
+    needs: [integration, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with: { context: ., file: infrastructure/docker/Dockerfile.python, tags: "cvi-python:local", load: true, cache-from: type=gha, cache-to: "type=gha,mode=max" }
+      - uses: docker/build-push-action@v6
+        with: { context: ., file: infrastructure/docker/Dockerfile.frontend, tags: "cvi-frontend:local", load: true, cache-from: type=gha, cache-to: "type=gha,mode=max" }
+      - uses: aquasecurity/trivy-action@0.24.0
+        with: { image-ref: "cvi-python:local", severity: "HIGH,CRITICAL", exit-code: "1", ignore-unfixed: true }
+      - uses: aquasecurity/trivy-action@0.24.0
+        with: { image-ref: "cvi-frontend:local", severity: "HIGH,CRITICAL", exit-code: "1", ignore-unfixed: true }
+
+  deploy-validation:
+    name: Deployment validation (compose, Kubernetes, Terraform)
+    runs-on: ubuntu-latest
+    needs: [images]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env && docker compose config -q
+      - name: Kubernetes manifests
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          kubectl kustomize infrastructure/kubernetes/overlays/dev | ./kubeconform -strict -summary -ignore-missing-schemas
+          kubectl kustomize infrastructure/kubernetes/overlays/aws | ./kubeconform -strict -summary -ignore-missing-schemas
+      - uses: hashicorp/setup-terraform@v3
+      - run: cd infrastructure/terraform/aws && terraform init -backend=false && terraform validate
+      - uses: aquasecurity/trivy-action@0.24.0
+        with: { scan-type: config, scan-ref: infrastructure, severity: "HIGH,CRITICAL", exit-code: "0" }
+
+  e2e:
+    name: End-to-end (compose) + DAST + load smoke
+    runs-on: ubuntu-latest
+    needs: [deploy-validation]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env && sed -i 's/^SEED_VEHICLES=.*/SEED_VEHICLES=3000/; s/^SEED_HISTORY_ALERTS=.*/SEED_HISTORY_ALERTS=20000/' .env
+      - run: docker compose up --build -d --wait --wait-timeout 600
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}" }
+      - run: pip install httpx
+      - name: Acceptance against the running stack (scenarios -> alerts -> agent)
+        run: python scripts/e2e.py --base http://localhost:8000 --timeout 90
+      - name: DAST (OWASP ZAP API scan)
+        run: |
+          docker run --rm --network host -v "$PWD:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py -t http://localhost:8000/openapi.json -f openapi -r zap-report.html -I
+      - uses: grafana/setup-k6-action@v1
+      - name: k6 smoke (short; the full 100K events/s profile needs a cloud load generator, see docs/testing.md)
+        run: |
+          k6 run -e BASE=http://localhost:8001 -e STEADY=30s -e BURST=15s -e RATE=5 -e BATCH=200 tests/load/k6_ingest.js
+          k6 run -e BASE=http://localhost:8000 -e VUS=10 -e HOLD=30s tests/load/k6_api.js
+      - name: Chaos - kill services and verify recovery
+        run: bash scripts/chaos_compose.sh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: zap-report, path: zap-report.html }
+      - if: failure()
+        run: docker compose logs --tail=200

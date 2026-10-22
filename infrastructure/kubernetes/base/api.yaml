@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels: { app.kubernetes.io/name: api, app.kubernetes.io/part-of: cvi }
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app.kubernetes.io/name: api } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: api, app.kubernetes.io/part-of: cvi }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "8000", prometheus.io/path: /metrics }
+    spec:
+      serviceAccountName: cvi
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app.kubernetes.io/name: api } } }
+      containers:
+        - name: api
+          image: cvi-python:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "cvi.api"]
+          ports:
+            - { name: http, containerPort: 8000 }
+          env:
+            - { name: HEALTH_PORT, value: "8000" }
+          envFrom:
+            - configMapRef: { name: cvi-config }
+            - secretRef: { name: cvi-secrets }
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: "1", memory: 768Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }, { name: data, mountPath: /data }]
+          startupProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 5, failureThreshold: 30 }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3 }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3 }
+      volumes: [{ name: tmp, emptyDir: {} }, { name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels: { app.kubernetes.io/name: api }
+spec:
+  selector: { app.kubernetes.io/name: api }
+  ports: [{ name: http, port: 8000, targetPort: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: api }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app.kubernetes.io/name: api } }

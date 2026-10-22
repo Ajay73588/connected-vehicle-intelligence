@@ -1,0 +1,33 @@
+groups:
+  - name: cvi-slo
+    rules:
+      - alert: CriticalAlertLatencyHigh
+        expr: histogram_quantile(0.99, sum by (le) (rate(alert_latency_seconds_bucket[5m]))) > 5
+        for: 2m
+        labels: { severity: page }
+        annotations: { summary: "p99 time from ingest to persisted alert exceeds the 5 s SLO" }
+      - alert: ConsumerLagGrowing
+        expr: sum(consumer_lag{topic="telemetry.validated"}) > 100000 and deriv(sum(consumer_lag{topic="telemetry.validated"})[5m:]) > 0
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "Stream processors are falling behind; scale stream-processor replicas" }
+      - alert: ApiLatencySloBreach
+        expr: histogram_quantile(0.95, sum by (le) (rate(api_request_latency_seconds_bucket{route!~"/metrics|/health.*"}[5m]))) > 0.2
+        for: 5m
+        labels: { severity: warn }
+        annotations: { summary: "API p95 above 200 ms" }
+      - alert: ApiErrorRateHigh
+        expr: sum(rate(api_requests_total{status=~"5.."}[5m])) / sum(rate(api_requests_total[5m])) > 0.01
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "More than 1% of API requests fail" }
+      - alert: CircuitBreakerOpen
+        expr: max by (name) (circuit_breaker_open) == 1
+        for: 1m
+        labels: { severity: warn }
+        annotations: { summary: "Dependency {{ $labels.name }} is failing; the pipeline is applying back-pressure" }
+      - alert: DeadLetterRateHigh
+        expr: sum(rate(dlq_messages_total[5m])) / sum(rate(events_received_total[5m])) > 0.05
+        for: 10m
+        labels: { severity: warn }
+        annotations: { summary: "More than 5% of incoming telemetry is being rejected" }

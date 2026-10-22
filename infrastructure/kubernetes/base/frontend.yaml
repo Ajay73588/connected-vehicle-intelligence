@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: frontend, labels: { app.kubernetes.io/name: frontend, app.kubernetes.io/part-of: cvi } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: frontend } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: frontend, app.kubernetes.io/part-of: cvi } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: frontend
+          image: cvi-frontend:latest
+          ports: [{ name: http, containerPort: 8080 }]
+          resources: { requests: { cpu: 50m, memory: 32Mi }, limits: { cpu: 250m, memory: 128Mi } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          readinessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: frontend }
+spec:
+  selector: { app.kubernetes.io/name: frontend }
+  ports: [{ name: http, port: 80, targetPort: http }]

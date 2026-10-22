@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AlertEvent v1 (topic: alerts)",
+  "type": "object",
+  "required": ["id", "tenant_id", "vehicle_id", "vin", "type", "severity", "confidence", "cause", "recommended_action", "event_ts", "ingest_ts", "dedup_key"],
+  "properties": {
+    "id": {"type": "integer"},
+    "tenant_id": {"type": "integer"},
+    "vehicle_id": {"type": "integer"},
+    "vin": {"type": "string", "pattern": "^[A-HJ-NPR-Z0-9]{17}$"},
+    "type": {"type": "string"},
+    "severity": {"enum": ["info", "warning", "critical"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "cause": {"type": "string", "minLength": 1},
+    "recommended_action": {"type": "string", "minLength": 1},
+    "details": {"type": "object"},
+    "event_ts": {"type": "integer"},
+    "ingest_ts": {"type": "integer"},
+    "dedup_key": {"type": "string"}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,41 @@
+# Non-secret configuration. Endpoints are provided per environment by the overlays (RDS/ElastiCache/MSK/... in AWS).
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: cvi-config }
+data:
+  ENV: production
+  BROKER: kafka
+  OBJECT_STORE: s3
+  LOG_LEVEL: INFO
+  KAFKA_BOOTSTRAP: kafka:9092
+  REDIS_URL: redis://redis:6379/0
+  MONGO_URL: mongodb://mongo:27017
+  S3_BUCKET: cvi-telemetry
+  TOPIC_PARTITIONS: "48"
+  RATE_LIMIT_PER_MINUTE: "600"
+  ALLOWED_LATENESS_S: "300"
+  RAW_EVENTS_TTL_DAYS: "7"
+  BATCH_SIZE: "500"
+  LIFECYCLE_INTERVAL_S: "300"
+  CORS_ORIGINS: https://cvi.example.com
+---
+# PLACEHOLDER secret for local clusters. Production replaces this with an External Secrets object backed by
+# AWS Secrets Manager (see overlays/aws). Never commit real values.
+apiVersion: v1
+kind: Secret
+metadata: { name: cvi-secrets }
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql://cvi_app:CHANGE_ME@postgres:5432/cvi
+  WORKER_DATABASE_URL: postgresql://cvi_worker:CHANGE_ME@postgres:5432/cvi
+  ADMIN_DATABASE_URL: postgresql://cvi:CHANGE_ME@postgres:5432/cvi
+  APP_DB_PASSWORD: CHANGE_ME
+  WORKER_DB_PASSWORD: CHANGE_ME
+  JWT_SECRET: CHANGE_ME_CHANGE_ME_CHANGE_ME_32CH
+  INGEST_API_KEY: CHANGE_ME
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cvi
+  annotations: {}   # overlays/aws adds the IRSA role ARN (S3 access without static keys)

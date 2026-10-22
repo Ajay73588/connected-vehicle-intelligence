@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent chat response v1",
+  "type": "object",
+  "required": ["session_id", "answer", "intent", "tool_calls", "recommended_actions", "pending_confirmation", "llm_used"],
+  "properties": {
+    "session_id": {"type": "string"},
+    "answer": {"type": "string"},
+    "intent": {"type": "string"},
+    "tool_calls": {"type": "array", "items": {"type": "object", "required": ["tool", "ok"], "properties": {"tool": {"type": "string"}, "ok": {"type": "boolean"}, "ms": {"type": "number"}, "args": {"type": "object"}}}},
+    "sources": {"type": "array"},
+    "recommended_actions": {"type": "array", "items": {"type": "string"}},
+    "pending_confirmation": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["token", "action", "description", "expires_in_s"]}]},
+    "llm_used": {"type": "boolean"},
+    "guardrail": {"type": "string"}
+  }
+}

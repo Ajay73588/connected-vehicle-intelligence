@@ -1,0 +1,12 @@
+.venv
+.data
+.git
+**/node_modules
+frontend/dist
+tests
+docs
+benchmarks
+infrastructure/terraform
+__pycache__
+.pytest_cache
+.env

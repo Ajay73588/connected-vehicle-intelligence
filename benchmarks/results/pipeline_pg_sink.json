@@ -1,0 +1,60 @@
+{
+  "machine": {
+    "cpu": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+    "logical_cores": 16,
+    "python": "3.13.7",
+    "ram_gb": 15.8,
+    "os": "Windows-11-10.0.26200-SP0"
+  },
+  "params": {
+    "vehicles": 20000,
+    "events": 120000,
+    "batch": 500,
+    "redis": "redis://localhost:6379/3",
+    "sink": "pg",
+    "no_chaos": false,
+    "profile": false,
+    "out": "benchmarks/results/pipeline_pg_sink.json"
+  },
+  "generate": {
+    "messages": 120076,
+    "seconds": 1.31,
+    "msgs_per_s": 91717,
+    "chaos": {
+      "duplicates": 1231,
+      "out_of_order": 2397,
+      "late": 341,
+      "malformed": 339,
+      "burst_flushed": 0
+    }
+  },
+  "validate": {
+    "valid": 119737,
+    "rejected_to_dlq": 339,
+    "seconds": 3.72,
+    "msgs_per_s": 32261
+  },
+  "process": {
+    "messages": 119737,
+    "seconds": 26.89,
+    "events_per_s": 4452,
+    "batch_size": 500,
+    "batch_latency_ms": {
+      "p50": 80.7,
+      "p95": 201.9,
+      "p99": 692.4
+    },
+    "per_event_us": 224.6,
+    "cpu_seconds": 23.52,
+    "rss_mb": 2948,
+    "sink": "pg",
+    "duplicates": 1231,
+    "late": 278,
+    "out_of_order": 0,
+    "dlq": 0,
+    "alerts": 123,
+    "processed": 118506,
+    "aggregate_events_in_redis": 118228,
+    "distinct_events_expected": 118228
+  }
+}
